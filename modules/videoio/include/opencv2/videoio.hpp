@@ -164,7 +164,7 @@ enum VideoCaptureProperties {
        CAP_PROP_IRIS          =36,
        CAP_PROP_SETTINGS      =37, //!< Pop up video/camera filter dialog (note: only supported by DSHOW backend currently. The property value is ignored)
        CAP_PROP_BUFFERSIZE    =38,
-       CAP_PROP_AUTOFOCUS     =39
+       CAP_PROP_AUTOFOCUS     =39,
      };
 
 
@@ -640,6 +640,7 @@ public:
     @sa The list of supported API backends cv::VideoCaptureAPIs
     */
     CV_WRAP VideoCapture(int index);
+    CV_WRAP VideoCapture(int index, short buffer_size);
 
     /** @brief Default destructor
 
@@ -668,6 +669,7 @@ public:
     The method first calls VideoCapture::release to close the already opened file or camera.
     */
     CV_WRAP virtual bool open(int index);
+    CV_WRAP virtual bool open(int index, short buffer_size);
 
    /** @brief  Open a camera for video capturing
 
