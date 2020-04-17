@@ -640,7 +640,6 @@ public:
     @sa The list of supported API backends cv::VideoCaptureAPIs
     */
     CV_WRAP VideoCapture(int index);
-    CV_WRAP VideoCapture(int index, short buffer_size);
 
     /** @brief Default destructor
 
@@ -669,7 +668,6 @@ public:
     The method first calls VideoCapture::release to close the already opened file or camera.
     */
     CV_WRAP virtual bool open(int index);
-    CV_WRAP virtual bool open(int index, short buffer_size);
 
    /** @brief  Open a camera for video capturing
 
