@@ -255,7 +255,6 @@ make & enjoy!
 #include <assert.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
-#include <iostream>
 
 #ifdef HAVE_CAMV4L
 #include <linux/videodev.h>
@@ -1173,12 +1172,6 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 			}
 		}
 		else full_buffer--;
-
-//		if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf)){
-//			perror ("VIDIOC_QBUF");
-//			return 0;
-//		}
-//
 
 	    fd_set fds;
 	    struct timeval tv;
