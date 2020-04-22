@@ -2079,7 +2079,7 @@ CvCapture* cvCreateCameraCapture_V4L( int index )
 
     CvCaptureCAM_V4L_CPP* capture = new CvCaptureCAM_V4L_CPP;
 
-	env_var = std::getenv("SET_V4L_BUFFER_SIZE");
+	env_var = std::getenv("OPENCV_QLEN");
 
 	if(env_var != NULL){
 		env_var_int = atoi(env_var);
