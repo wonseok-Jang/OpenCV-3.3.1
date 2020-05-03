@@ -1153,6 +1153,8 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	   if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf))
 	       perror ("VIDIOC_QBUF");
 	
+//	   printf("opencv image capture time : %f\n", capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);
+
 	   //set timestamp in capture struct to be timestamp of most recent frame
 	   /** where timestamps refer to the instant the field or frame was received by the driver, not the capture time*/
 	
@@ -1221,6 +1223,8 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	   capture->bufferIndex = MAX_V4L_BUFFERS;
 //	   printf("go data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
 //	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
+
+//	   printf("opencv image capture time : %f\n", capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);
 	#else
 	   capture->bufferIndex = buf.index;
 	#endif
@@ -1252,7 +1256,7 @@ static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
 	            /* Timeout. */
 	            tv.tv_sec = 10;
 	            tv.tv_usec = 0;
-	
+
 	            r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 	
 	            if (-1 == r) {
@@ -2094,7 +2098,7 @@ CvCapture* cvCreateCameraCapture_V4L( int index )
 		changed_buffer_size = 1;
 		SYNC_FETCH = 1;
 	}
-	else if (env_var_int == 1 || 2 || 3 || 4){
+	else if ((1 <= env_var_int) && (env_var_int <= 4)){
 		changed_buffer_size = env_var_int;
 	}
 	else changed_buffer_size = DEFAULT_V4L_BUFFERS;
