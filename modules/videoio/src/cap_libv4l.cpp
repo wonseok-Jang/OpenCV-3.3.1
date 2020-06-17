@@ -292,7 +292,11 @@ struct buffer
   size_t  length;
 };
 static unsigned int n_buffers = 0;
-
+int full_buffer=0;
+int FirstRead=1;
+int SYNC_FETCH=0;
+int changed_buffer_size;
+double select_ms;
 /* TODO: Dilemas: */
 /* TODO: Consider drop the use of this data structure and perform ioctl to obtain needed values */
 /* TODO: Consider at program exit return controls to the initial values - See v4l2_free_ranges function */
@@ -391,6 +395,12 @@ static int xioctl( int fd, int request, void *arg)
    Start from 0 and go to MAX_CAMERAS while checking for the device with that name.
    If it fails on the first attempt of /dev/video0, then check if /dev/video is valid.
    Returns the global numCameras with the correct value (we hope) */
+
+static double gettime_after_boot() {
+	struct timespec time_after_boot;
+	clock_gettime(CLOCK_MONOTONIC,&time_after_boot);
+	return (time_after_boot.tv_sec*1000+time_after_boot.tv_nsec*0.000001);
+}
 
 static void icvInitCapture_V4L() {
    int deviceHandle;
@@ -734,9 +744,11 @@ static int _capture_V4L2 (CvCaptureCAM_V4L *capture, const char *deviceName)
     requestedPixelFormat = V4L2_PIX_FMT_YUV420;
     break;
   case CV_CAP_MODE_YUYV:
+    printf("YUYV\n");
     requestedPixelFormat = V4L2_PIX_FMT_YUYV;
     break;
   default:
+    printf("BGR24\n");
     requestedPixelFormat = V4L2_PIX_FMT_BGR24;
     break;
   }
@@ -774,7 +786,8 @@ static int _capture_V4L2 (CvCaptureCAM_V4L *capture, const char *deviceName)
 
    CLEAR (capture->req);
 
-   unsigned int buffer_number = DEFAULT_V4L_BUFFERS;
+   //unsigned int buffer_number = DEFAULT_V4L_BUFFERS;
+   unsigned int buffer_number = changed_buffer_size;
 
    try_again:
 
@@ -1078,6 +1091,7 @@ static CvCaptureCAM_V4L * icvCaptureFromCAM_V4L (const char* deviceName)
 
    /* Present the routines needed for V4L funtionality.  They are inserted as part of
       the standard set of cv calls promoting transparency.  "Vector Table" insertion. */
+
    capture->FirstCapture = 1;
 
    /* set the default size */
@@ -1103,97 +1117,205 @@ static CvCaptureCAM_V4L * icvCaptureFromCAM_V4L (const char* deviceName)
 #ifdef HAVE_CAMV4L2
 
 static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
-    struct v4l2_buffer buf;
+	//printf("SYNC_FETCH :%d\n", SYNC_FETCH);
+	if(!SYNC_FETCH){
+	    struct v4l2_buffer buf;
+	
+	    CLEAR (buf);
+	
+	    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	    buf.memory = V4L2_MEMORY_MMAP;
+	
+	    if (-1 == xioctl (capture->deviceHandle, VIDIOC_DQBUF, &buf)) {
+	        switch (errno) {
+	        case EAGAIN:
+	            return 0;
+	
+	        case EIO:
+	            /* Could ignore EIO, see spec. */
+	
+	            /* fall through */
+	
+	        default:
+	            /* display the error and stop processing */
+	            capture->returnFrame = false;
+	            perror ("VIDIOC_DQBUF");
+	            return -1;
+	        }
+	   }
+	
+	   assert(buf.index < capture->req.count);
+	
+	#ifdef USE_TEMP_BUFFER
+	   memcpy(capture->buffers[MAX_V4L_BUFFERS].start,
+	    capture->buffers[buf.index].start,
+	    capture->buffers[MAX_V4L_BUFFERS].length );
+	   capture->bufferIndex = MAX_V4L_BUFFERS;
+	   printf("got data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
+	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
+	#else
+	   capture->bufferIndex = buf.index;
+	#endif
+	   capture->timestamp = buf.timestamp;   //printf( "timestamp update done \n");
+	   capture->sequence = buf.sequence;
+	
+	   if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf))
+	       perror ("VIDIOC_QBUF");
+	
+//	   printf("opencv image capture time : %f\n", capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);
 
-    CLEAR (buf);
+	   //set timestamp in capture struct to be timestamp of most recent frame
+	   /** where timestamps refer to the instant the field or frame was received by the driver, not the capture time*/
+	
+	   return 1;
+	}else{
+        double select_start;
+	    struct v4l2_buffer buf;
+	    CLEAR (buf);
+	
+	    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	    buf.memory = V4L2_MEMORY_MMAP;
+	    buf.index=0;
+	
+		if(full_buffer == 0){
+			if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf)){
+				perror ("VIDIOC_QBUF");
+				return 0;
+			}
+		}
+		else full_buffer--;
 
-    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    buf.memory = V4L2_MEMORY_MMAP;
+	    fd_set fds;
+	    struct timeval tv;
+	    int r;
+	
+	    FD_ZERO (&fds);
+	    FD_SET (capture->deviceHandle, &fds);
+	
+	    /* Timeout. */
+	    tv.tv_sec = 10;
+	    tv.tv_usec = 0;
+	
+        select_start = gettime_after_boot();
 
-    if (-1 == xioctl (capture->deviceHandle, VIDIOC_DQBUF, &buf)) {
-        switch (errno) {
-        case EAGAIN:
-            return 0;
+	    r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 
-        case EIO:
-            /* Could ignore EIO, see spec. */
+        select_ms = gettime_after_boot() - select_start;
 
-            /* fall through */
+        printf("select : %f\n", select_ms);
+	
+	    if (-1 == r) 
+	        perror ("select");
+	
+	    if (0 == r) 
+	        fprintf (stderr, "select timeout\n");
+	
+	
+	
+	    if (-1 == xioctl (capture->deviceHandle, VIDIOC_DQBUF, &buf)) {
+	        switch (errno) {
+	        case EAGAIN:
+	            return 0;
+	
+	        case EIO:
+	            /* Could ignore EIO, see spec. */
+	
+	            /* fall through */
+	
+	        default:
+	            /* display the error and stop processing */
+	            capture->returnFrame = false;
+	            perror ("VIDIOC_DQBUF");
+	            return -1;
+	        }
+	   }
+	
+	   assert(buf.index < capture->req.count);
+	
+	#ifdef USE_TEMP_BUFFER
+	   memcpy(capture->buffers[MAX_V4L_BUFFERS].start,
+	    capture->buffers[buf.index].start,
+	    capture->buffers[MAX_V4L_BUFFERS].length );
+	   capture->bufferIndex = MAX_V4L_BUFFERS;
+//	   printf("go data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
+//	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
 
-        default:
-            /* display the error and stop processing */
-            capture->returnFrame = false;
-            perror ("VIDIOC_DQBUF");
-            return -1;
-        }
+//	   printf("opencv image capture time : %f\n", capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);
+	#else
+	   capture->bufferIndex = buf.index;
+	#endif
+	   //set timestamp in capture struct to be timestamp of most recent frame
+	   /** where timestamps refer to the instant the field or frame was received by the driver, not the capture time*/
+	   capture->timestamp = buf.timestamp;   //printf( "timestamp update done \n");
+	   capture->sequence = buf.sequence;
+	
+	   return 1;
    }
 
-   assert(buf.index < capture->req.count);
-
-#ifdef USE_TEMP_BUFFER
-   memcpy(capture->buffers[MAX_V4L_BUFFERS].start,
-    capture->buffers[buf.index].start,
-    capture->buffers[MAX_V4L_BUFFERS].length );
-   capture->bufferIndex = MAX_V4L_BUFFERS;
-   //printf("got data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
-   //   buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
-#else
-   capture->bufferIndex = buf.index;
-#endif
-
-   if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf))
-       perror ("VIDIOC_QBUF");
-
-   //set timestamp in capture struct to be timestamp of most recent frame
-   /** where timestamps refer to the instant the field or frame was received by the driver, not the capture time*/
-   capture->timestamp = buf.timestamp;   //printf( "timestamp update done \n");
-   capture->sequence = buf.sequence;
-
-   return 1;
+    
 }
 
 static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
     unsigned int count;
 
     count = 1;
+	if(!SYNC_FETCH){
+	    while (count-- > 0) {
+	        for (;;) {
+                double select_start;
+	            fd_set fds;
+	            struct timeval tv;
+	            int r;
+	
+	            FD_ZERO (&fds);
+	            FD_SET (capture->deviceHandle, &fds);
+	
+	            /* Timeout. */
+	            tv.tv_sec = 10;
+	            tv.tv_usec = 0;
 
-    while (count-- > 0) {
-        for (;;) {
-            fd_set fds;
-            struct timeval tv;
-            int r;
+                select_start = gettime_after_boot();
 
-            FD_ZERO (&fds);
-            FD_SET (capture->deviceHandle, &fds);
+                r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 
-            /* Timeout. */
-            tv.tv_sec = 10;
-            tv.tv_usec = 0;
+                select_ms = gettime_after_boot() - select_start;
 
-            r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
+                printf("select : %f\n", select_ms);
 
-            if (-1 == r) {
-                if (EINTR == errno)
-                    continue;
-
-                perror ("select");
-            }
-
-            if (0 == r) {
-                fprintf (stderr, "select timeout\n");
-
-                /* end the infinite loop */
-                break;
-            }
-
-            int returnCode=read_frame_v4l2(capture);
-            if (returnCode == -1)
-                return -1;
-            if (returnCode == 1)
-                return 0;
-        }
-    }
-    return 0;
+	            if (-1 == r) {
+	                if (EINTR == errno)
+	                    continue;
+	
+	                perror ("select");
+	            }
+	
+	            if (0 == r) {
+	                fprintf (stderr, "select timeout\n");
+	
+	                /* end the infinite loop */
+	                break;
+	            }
+	
+	            int returnCode=read_frame_v4l2(capture);
+	            if (returnCode == -1)
+	                return -1;
+	            if (returnCode == 1)
+	                return 0;
+	        }
+	    }
+	return 0;
+	}else{
+	    while (count-- > 0) {
+	        for (;;) {
+	            int returnCode=read_frame_v4l2(capture);
+	            if (returnCode == -1)
+	                return -1;
+	            if (returnCode == 1)
+	                return 0;
+			}
+   		}
+	return 0;
+	}
 }
 
 static int icvGrabFrameCAM_V4L(CvCaptureCAM_V4L* capture) {
@@ -1211,7 +1333,6 @@ static int icvGrabFrameCAM_V4L(CvCaptureCAM_V4L* capture) {
              capture->bufferIndex < ((int)capture->req.count);
              ++capture->bufferIndex)
         {
-
           struct v4l2_buffer buf;
 
           CLEAR (buf);
@@ -1256,6 +1377,7 @@ static int icvGrabFrameCAM_V4L(CvCaptureCAM_V4L* capture) {
 
       /* preparation is ok */
       capture->FirstCapture = 0;
+	  full_buffer++;
    }
 
    if (capture->is_v4l2_device == 1)
@@ -1420,7 +1542,7 @@ static double icvGetPropertyCAM_V4L (CvCaptureCAM_V4L* capture,
 
     case CV_CAP_PROP_POS_MSEC:
         if (capture->FirstCapture) {
-            return 0;
+            return 1000*capture->timestamp.tv_sec+((double)capture->timestamp.tv_usec)/1000;
         } else {
             //would be maximally numerically stable to cast to convert as bits, but would also be counterintuitive to decode
             return 1000 * capture->timestamp.tv_sec + ((double) capture->timestamp.tv_usec) / 1000;
@@ -1444,8 +1566,8 @@ static double icvGetPropertyCAM_V4L (CvCaptureCAM_V4L* capture,
         double framesPerSec = sp.parm.capture.timeperframe.denominator / (double)  sp.parm.capture.timeperframe.numerator ;
         return framesPerSec;
     }
-    break;
 
+    break;
 
     case CV_CAP_PROP_MODE:
       return capture->mode;
@@ -1481,6 +1603,9 @@ static double icvGetPropertyCAM_V4L (CvCaptureCAM_V4L* capture,
     case CV_CAP_PROP_AUTOFOCUS:
       sprintf(name, "Autofocus");
       capture->control.id = V4L2_CID_FOCUS_AUTO;
+    case CV_CAP_PROP_SELECT:
+      return select_ms;
+      break;
     default:
       sprintf(name, "<unknown property string>");
       capture->control.id = property_id;
@@ -1612,6 +1737,7 @@ static int icvSetVideoSize( CvCaptureCAM_V4L* capture, int w, int h) {
 
     /* we need to re-initialize some things, like buffers, because the size has
      * changed */
+
     capture->FirstCapture = 1;
 
     /* Get window info again, to get the real value */
@@ -1849,7 +1975,7 @@ static int icvSetPropertyCAM_V4L(CvCaptureCAM_V4L* capture, int property_id, dou
         break;
     case CV_CAP_PROP_FPS:
         struct v4l2_streamparm setfps;
-        memset (&setfps, 0, sizeof(struct v4l2_streamparm));
+		memset (&setfps, 0, sizeof(struct v4l2_streamparm));
         setfps.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
         setfps.parm.capture.timeperframe.numerator = 1;
         setfps.parm.capture.timeperframe.denominator = value;
@@ -1978,10 +2104,34 @@ bool CvCaptureCAM_V4L_CPP::setProperty( int propId, double value )
 
 CvCapture* cvCreateCameraCapture_V4L( int index )
 {
+	int env_var_int;
+	char *env_var;
+
     CvCaptureCAM_V4L_CPP* capture = new CvCaptureCAM_V4L_CPP;
 
-    if( capture->open( index ))
+	env_var = std::getenv("OPENCV_QLEN");
+
+	if(env_var != NULL){
+		env_var_int = atoi(env_var);
+	}
+	else {
+		printf("Using DEFAULT V4L BUFFERS\n");
+		env_var_int = DEFAULT_V4L_BUFFERS;
+	}
+
+	if(env_var_int == 0){
+		printf("Using Synchronous Fetch\n");
+		changed_buffer_size = 1;
+		SYNC_FETCH = 1;
+	}
+	else if ((1 <= env_var_int) && (env_var_int <= 4)){
+		changed_buffer_size = env_var_int;
+	}
+	else changed_buffer_size = DEFAULT_V4L_BUFFERS;
+
+    if( capture->open( index )){
         return (CvCapture*)capture;
+	}
 
     delete capture;
     return 0;
