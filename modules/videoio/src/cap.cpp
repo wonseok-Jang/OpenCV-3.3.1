@@ -651,6 +651,7 @@ bool VideoCapture::open(int index)
     cap.reset(cvCreateCameraCapture(index));
     return isOpened();
 }
+
 bool  VideoCapture::open(int cameraNum, int apiPreference)
 {
     CV_TRACE_FUNCTION();

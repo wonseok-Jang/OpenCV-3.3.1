@@ -1151,8 +1151,8 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	    capture->buffers[buf.index].start,
 	    capture->buffers[MAX_V4L_BUFFERS].length );
 	   capture->bufferIndex = MAX_V4L_BUFFERS;
-	   printf("got data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
-	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
+//	   printf("got data in buff %d, len=%d, flags=0x%X, seq=%d, used=%d)\n",
+//	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
 	#else
 	   capture->bufferIndex = buf.index;
 	#endif
@@ -1202,7 +1202,8 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 
         select_ms = gettime_after_boot() - select_start;
 
-        printf("select : %f\n", select_ms);
+//        printf("select : %f\n", select_ms);
+	    r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 	
 	    if (-1 == r) 
 	        perror ("select");
@@ -1280,8 +1281,10 @@ static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
 
                 select_ms = gettime_after_boot() - select_start;
 
-                printf("select : %f\n", select_ms);
+//                printf("select : %f\n", select_ms);
 
+	            r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
+	
 	            if (-1 == r) {
 	                if (EINTR == errno)
 	                    continue;
