@@ -296,7 +296,7 @@ int full_buffer=0;
 int FirstRead=1;
 int SYNC_FETCH=0;
 int changed_buffer_size;
-double select_ms;
+double select_ms, select_start, select_end;
 /* TODO: Dilemas: */
 /* TODO: Consider drop the use of this data structure and perform ioctl to obtain needed values */
 /* TODO: Consider at program exit return controls to the initial values - See v4l2_free_ranges function */
@@ -1159,6 +1159,8 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	   capture->timestamp = buf.timestamp;   //printf( "timestamp update done \n");
 	   capture->sequence = buf.sequence;
 	
+       //select_ms = select_end - (capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);  
+
 	   if (-1 == xioctl (capture->deviceHandle, VIDIOC_QBUF, &buf))
 	       perror ("VIDIOC_QBUF");
 	
@@ -1169,7 +1171,6 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	
 	   return 1;
 	}else{
-        double select_start;
 	    struct v4l2_buffer buf;
 	    CLEAR (buf);
 	
@@ -1201,6 +1202,7 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 	    r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 
         select_ms = gettime_after_boot() - select_start;
+        //select_end = gettime_after_boot();
 
 //        printf("select : %f\n", select_ms);
 	    r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
@@ -1242,6 +1244,7 @@ static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
 //	      buf.index, buf.length, buf.flags, buf.sequence, buf.bytesused);
 
 //	   printf("opencv image capture time : %f\n", capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);
+       //select_ms = select_end - (capture->timestamp.tv_sec*1000+(double)capture->timestamp.tv_usec*0.001);  
 	#else
 	   capture->bufferIndex = buf.index;
 	#endif
@@ -1263,7 +1266,6 @@ static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
 	if(!SYNC_FETCH){
 	    while (count-- > 0) {
 	        for (;;) {
-                double select_start;
 	            fd_set fds;
 	            struct timeval tv;
 	            int r;
@@ -1280,11 +1282,10 @@ static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
                 r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
 
                 select_ms = gettime_after_boot() - select_start;
+                select_end = gettime_after_boot();
 
 //                printf("select : %f\n", select_ms);
 
-	            r = select (capture->deviceHandle+1, &fds, NULL, NULL, &tv);
-	
 	            if (-1 == r) {
 	                if (EINTR == errno)
 	                    continue;
@@ -2123,7 +2124,7 @@ CvCapture* cvCreateCameraCapture_V4L( int index )
 	}
 
 	if(env_var_int == 0){
-		printf("Using Synchronous Fetch\n");
+		printf("Using On-demand capture\n");
 		changed_buffer_size = 1;
 		SYNC_FETCH = 1;
 	}
