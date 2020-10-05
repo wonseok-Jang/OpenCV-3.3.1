@@ -21,7 +21,14 @@ Please read the [contribution guidelines](https://github.com/opencv/opencv/wiki/
 
 ### OpenCV rebuild
 
-* Replace *${OPENCV_SOURCE_DIR}/modules* to *OpenCV-3.3.1/modules/*.
+* Replace *<OPENCV_SOURCE_DIR>/modules* to *OpenCV-3.3.1/modules/*.
+```
+$ mv mv OpenCV-3.3.1/modules/ ${OPENCV_SOURCE_DIR}/modules
+```
+* Rebuild
+```
+$ cd <OPENCV_SOURCE_DIR>/build && sudo make install
+```
 
 ### Image capture
 
