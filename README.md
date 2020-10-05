@@ -18,3 +18,15 @@ Please read the [contribution guidelines](https://github.com/opencv/opencv/wiki/
 * Include tests and documentation;
 * Clean up "oops" commits before submitting;
 * Follow the [coding style guide](https://github.com/opencv/opencv/wiki/Coding_Style_Guide).
+
+### Image capture
+
+```
+# Original capture 
+$ export OPENCV_QLEN = Queue size (Queue size = 1,2,3,4)
+$ source ~/.bashrc
+
+# On-demand capture
+$ export OPENCV_QLEN = 0
+$ source ~/.bashrc
+```
