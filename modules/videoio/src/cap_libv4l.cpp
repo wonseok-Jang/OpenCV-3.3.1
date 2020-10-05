@@ -294,7 +294,7 @@ struct buffer
 static unsigned int n_buffers = 0;
 int full_buffer=0;
 int FirstRead=1;
-int SYNC_FETCH=0;
+int ondemand=0;
 int changed_buffer_size;
 double select_ms, select_start, select_end;
 /* TODO: Dilemas: */
@@ -1117,8 +1117,7 @@ static CvCaptureCAM_V4L * icvCaptureFromCAM_V4L (const char* deviceName)
 #ifdef HAVE_CAMV4L2
 
 static int read_frame_v4l2(CvCaptureCAM_V4L* capture) {
-	//printf("SYNC_FETCH :%d\n", SYNC_FETCH);
-	if(!SYNC_FETCH){
+	if(!ondemand){
 	    struct v4l2_buffer buf;
 	
 	    CLEAR (buf);
@@ -1263,7 +1262,7 @@ static int mainloop_v4l2(CvCaptureCAM_V4L* capture) {
     unsigned int count;
 
     count = 1;
-	if(!SYNC_FETCH){
+	if(!ondemand){
 	    while (count-- > 0) {
 	        for (;;) {
 	            fd_set fds;
@@ -2126,7 +2125,7 @@ CvCapture* cvCreateCameraCapture_V4L( int index )
 	if(env_var_int == 0){
 		printf("Using On-demand capture\n");
 		changed_buffer_size = 1;
-		SYNC_FETCH = 1;
+        ondemand = 1;
 	}
 	else if ((1 <= env_var_int) && (env_var_int <= 4)){
 		changed_buffer_size = env_var_int;
