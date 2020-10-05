@@ -23,7 +23,7 @@ Please read the [contribution guidelines](https://github.com/opencv/opencv/wiki/
 
 * Replace *<OPENCV_SOURCE_DIR>/modules* to *OpenCV-3.3.1/modules/*.
 ```
-$ mv mv OpenCV-3.3.1/modules/ ${OPENCV_SOURCE_DIR}/modules
+$ mv OpenCV-3.3.1/modules/ <OPENCV_SOURCE_DIR>/modules
 ```
 * Rebuild
 ```
@@ -35,9 +35,11 @@ $ cd <OPENCV_SOURCE_DIR>/build && sudo make install
 ```
 # Original capture 
 $ export OPENCV_QLEN = Queue size (Queue size = 1,2,3,4)
-$ source ~/.bashrc
 
 # On-demand capture
 $ export OPENCV_QLEN = 0
+
+# Set permanently 
+$ vi ~/.bashrc (add "export OPENCV_QLEN = Queue size")
 $ source ~/.bashrc
 ```
